@@ -1,8 +1,11 @@
+CC = gcc
+CFLAGS = -Wall -g -pthread
+
 run: compile
 	./main
 
 compile:
-	gcc -Wall main.c -L. -liof -lm -g -o main
+	$(CC) $(CFLAGS) main.c -L. -liof -o main
 	
 clean:
 	rm -f main
