@@ -18,9 +18,16 @@ typedef struct
 	
 } DATA;
 
+typedef struct 
+{
+	pthread_mutex_t   *mut;
+	pthread_barrier_t *bar;
+	pthread_t tid;
+	
+} arg_t;
+
 DATA initStruct(const char *chemin)
 {
-	int num;
 	int rd;
 	
 	DATA dt;
@@ -34,58 +41,49 @@ DATA initStruct(const char *chemin)
 		exit(EXIT_FAILURE);
 	}
 
-	rd = SE_lectureEntier(file, &num);
+	rd = SE_lectureEntier(file, &dt.nbrFrames);
 	if (rd <= 0)
 	{
 		fprintf(stderr, "ERR: missing nbrFrames\n");
-		goto err_rd;
+		SE_fermeture(file);
+		exit(EXIT_FAILURE);
 	}
-	
-	dt.nbrFrames = num;
 
-	rd = SE_lectureEntier(file, &num);
+	rd = SE_lectureEntier(file, &dt.taillePage);
 	if (rd <= 0)
 	{
 		fprintf(stderr, "ERR: missing taillePage\n");
-		goto err_rd;
+		SE_fermeture(file);
+		exit(EXIT_FAILURE);
 	}
 	
-	dt.taillePage = num;
-	
-	rd = SE_lectureEntier(file, &num);
+	rd = SE_lectureEntier(file, &dt.nbrPage);
 	if (rd <= 0)
 	{
 		fprintf(stderr, "ERR: missing nbrPage\n");
-		goto err_rd;
+		SE_fermeture(file);
+		exit(EXIT_FAILURE);
 	}
 	
-	dt.nbrPage = num;
-	
-	rd = SE_lectureEntier(file, &num);
+	rd = SE_lectureEntier(file, &dt.nbrThread);
 	if (rd <= 0)
 	{
 		fprintf(stderr, "ERR: missing nbrThread\n");
-		goto err_rd;
+		SE_fermeture(file);
+		exit(EXIT_FAILURE);
 	}
 	
-	dt.nbrThread = num;
-	
-	rd = SE_lectureEntier(file, &num);
+	rd = SE_lectureEntier(file, &dt.nbrAcces);
 	if (rd <= 0)
 	{
 		fprintf(stderr, "ERR: missing nbrAcces\n");
-		goto err_rd;
+		SE_fermeture(file);
+		exit(EXIT_FAILURE);
 	}
-	
-	dt.nbrAcces = num;
 	
 	SE_fermeture(file);
 	
 	return dt;
-	
-	err_rd:
-	SE_fermeture(file);
-	exit(EXIT_FAILURE);
 }
 
 void afficheConfig(DATA dt)
@@ -97,13 +95,57 @@ void afficheConfig(DATA dt)
 	printf("%d\n", dt.nbrAcces);
 }
 
+void * sommeTableau (void * arg)
+{
+	arg_t *at = (arg_t *) arg;
+	
+
+	
+	return NULL;
+}
+
+void progPrincipal(DATA dt)
+{
+	pthread_mutex_t   mut;
+	pthread_barrier_t bar;
+	
+	arg_t *at;
+	
+	at = malloc(dt.nbrThread * sizeof(arg_t));
+	
+	pthread_mutex_init(&mut, NULL);
+	pthread_barrier_init(&bar, NULL, dt.nbrThread);
+	
+	for(int cmpt = 0; cmpt < dt.nbrThread; cmpt++)
+	{
+		at[cmpt].mut = &mut;
+		at[cmpt].bar = &bar;
+	}
+	
+	for(int cmpt = 0; cmpt < dt.nbrThread; cmpt++)
+		pthread_create(&at[cmpt].tid, NULL, sommeTableau, &at[cmpt]);
+	
+	for(int cmpt = 0; cmpt < dt.nbrThread; cmpt++)
+		pthread_join(at[cmpt].tid, NULL);
+	
+	pthread_mutex_destroy(&mut);
+	pthread_barrier_destroy(&bar);	
+	
+	free(at);
+}
+
 int main()
 {
 	const char *chemin = "data.cfg";
-
+	
+	pthread_mutex_t   mut;
+	pthread_barrier_t bar;
+	
 	DATA dt = initStruct(chemin);
 	
 	afficheConfig(dt);
+	
+	progPrincipal(dt);
 	
 	return 0;
 }
