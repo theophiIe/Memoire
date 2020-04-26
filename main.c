@@ -18,13 +18,26 @@ typedef struct
 	
 } DATA;
 
+typedef struct
+{
+	int *memRapide;		//< Memoire physique RAM
+	int *memLente;		//< Memoire physique Disque
+	
+} MEMORY;
+
 typedef struct 
 {
 	pthread_mutex_t   *mut;
 	pthread_barrier_t *bar;
 	pthread_t tid;
 	
-} arg_t;
+	int hit;		//< Nombre de hit
+	int tailleMem;	//< Taille de la mémoire virtuelle
+	int numReq;		//< Nombre de requête
+	
+	int *memVir;	//< Mémoire virtuelle
+	
+} ARG_T;
 
 DATA initStruct(const char *chemin)
 {
@@ -86,52 +99,102 @@ DATA initStruct(const char *chemin)
 	return dt;
 }
 
-void afficheConfig(DATA dt)
+MEMORY initMemoirePhysique(int nbrPage, int nbrFrames)
 {
-	printf("%d\n", dt.nbrFrames);
-	printf("%d\n", dt.taillePage);
-	printf("%d\n", dt.nbrPage);
-	printf("%d\n", dt.nbrThread);
-	printf("%d\n", dt.nbrAcces);
+	MEMORY mem;
+	
+	mem.memLente = malloc(nbrPage * sizeof(int));
+	for(int size = 0; size < nbrPage; size++)
+		mem.memLente[size] = -1;
+	
+	mem.memRapide = malloc(nbrFrames * sizeof(int));
+	for(int size = 0; size < nbrFrames; size++)
+		mem.memRapide[size] = -1;
+	
+	return mem;
 }
 
-void * sommeTableau (void * arg)
+void afficheConfig(DATA dt)
 {
-	arg_t *at = (arg_t *) arg;
-	
+	printf("Nombre de frame : %d\n", dt.nbrFrames);
+	printf("Taille d'une page : %d = %dko\n", dt.taillePage, (dt.taillePage/1000));
+	printf("Nombre de page dans la memoire lente : %d\n", dt.nbrPage);
+	printf("Nombre de thread : %d\n", dt.nbrThread);
+	printf("Nombre de demande par thread : %d\n", dt.nbrAcces);
+}
 
+void * demandeAcces (void * arg)
+{
+	ARG_T *at = (ARG_T *) arg;
+	
+	for(int cmpt = 0; at -> numReq; cmpt++)
+	{
+		//Création du tube à partir du tid du thread
+		mkfifo (at -> tid, 0600);
+		
+		//Ectiture de la demande dans un tube en mode ecriture
+		//Lecture de la reponse de la part du pere
+		//Suppression du tube
+	}
 	
 	return NULL;
 }
 
-void progPrincipal(DATA dt)
+void gestionThread(DATA dt)
 {
 	pthread_mutex_t   mut;
 	pthread_barrier_t bar;
 	
-	arg_t *at;
+	ARG_T *at;
 	
-	at = malloc(dt.nbrThread * sizeof(arg_t));
+	at = malloc(dt.nbrThread * sizeof(ARG_T));
 	
+	//Creation mutex et barriere
 	pthread_mutex_init(&mut, NULL);
 	pthread_barrier_init(&bar, NULL, dt.nbrThread);
 	
+	//Init des infos pour la structure des threads
 	for(int cmpt = 0; cmpt < dt.nbrThread; cmpt++)
 	{
 		at[cmpt].mut = &mut;
 		at[cmpt].bar = &bar;
+		at[cmpt].hit = 0;
 	}
 	
+	//Creation des threads
 	for(int cmpt = 0; cmpt < dt.nbrThread; cmpt++)
-		pthread_create(&at[cmpt].tid, NULL, sommeTableau, &at[cmpt]);
+		pthread_create(&at[cmpt].tid, NULL, demandeAcces, &at[cmpt]);
 	
+	//Communication par tubes
+	for(int cmpt = 0; cmpt < dt.nbrThread * dt.nbrAcces; cmpt++)
+	{
+		//Probleme comment connaitre le tid de lecture var global?
+		//Lecture du tube avec comme chemin le tid du thread
+		//Recuperation de l'information ecrite dans le tube 
+		//Suppresion du tube 
+		//Creation du tube à partir du même tid que le tube du mode lecture
+		//Utiliser l'algo de LRU pout verifier la demande soit presente dans le cache
+		//Si la valeur est presente renvoyer la valeur grace au tube en ecriture
+		//Sinon renvoyé 0 par exemple 
+		
+	}
+	
+	//Fin des threads
 	for(int cmpt = 0; cmpt < dt.nbrThread; cmpt++)
 		pthread_join(at[cmpt].tid, NULL);
 	
+	//Suppresion des mutex et des barrieres 
 	pthread_mutex_destroy(&mut);
-	pthread_barrier_destroy(&bar);	
+	pthread_barrier_destroy(&bar);
 	
 	free(at);
+}
+
+int *LRU(int frame)
+{
+	int *cache;
+	
+	return cache;
 }
 
 int main()
@@ -145,7 +208,7 @@ int main()
 	
 	afficheConfig(dt);
 	
-	progPrincipal(dt);
+	gestionThread(dt);
 	
 	return 0;
 }
