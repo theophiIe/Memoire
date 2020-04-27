@@ -8,6 +8,8 @@
 
 #include "se_fichier.h"
 
+pthread_t num_tid;
+
 typedef struct 
 {
 	int nbrFrames;		//< Nombre de frames
@@ -32,10 +34,7 @@ typedef struct
 	pthread_t tid;
 	
 	int hit;		//< Nombre de hit
-	int tailleMem;	//< Taille de la mémoire virtuelle
 	int numReq;		//< Nombre de requête
-	
-	int *memVir;	//< Mémoire virtuelle
 	
 } ARG_T;
 
@@ -47,7 +46,6 @@ DATA initStruct(const char *chemin)
 	SE_FICHIER file;
 	
 	file = SE_ouverture (chemin, O_RDONLY);
-	
 	if (file.descripteur < 0) 
 	{
 		fprintf(stderr, "ERR: opening cfg file\n");
@@ -129,12 +127,42 @@ void * demandeAcces (void * arg)
 	
 	for(int cmpt = 0; at -> numReq; cmpt++)
 	{
+		//Faire l'appel à la mutex
+		pthread_mutex_lock(at -> mut);
+		
+		//Init de la variable global avec le tid
+		num_tid = at -> tid;
+		
 		//Création du tube à partir du tid du thread
 		mkfifo (at -> tid, 0600);
 		
+		//Ouverture du tube en mode ecriture
+		SE_FICHIER tube = SE_ouverture(at -> tid, O_WRONLY);
+		if (tube.descripteur < 0) 
+		{
+			fprintf(stderr, "ERR: opening tube\n");
+			exit(EXIT_FAILURE);
+		}
+		
 		//Ectiture de la demande dans un tube en mode ecriture
+		//Fermeture du tube
+		SE_fermeture (tube);
+		
+		//Ouverture du tube pour la lecture
+		SE_FICHIER tube = SE_ouverture(at -> tid, O_RDONLY);
+		if (tube.descripteur < 0) 
+		{
+			fprintf(stderr, "ERR: opening tube\n");
+			exit(EXIT_FAILURE);
+		}
+		
 		//Lecture de la reponse de la part du pere
-		//Suppression du tube
+		//Fermeture et Suppression du tube
+		SE_fermeture (tube);
+		SE_suppression (at -> tid);
+		
+		//Fin du mutex
+		pthread_mutex_unlock(at -> mut);
 	}
 	
 	return NULL;
@@ -170,13 +198,35 @@ void gestionThread(DATA dt)
 	{
 		//Probleme comment connaitre le tid de lecture var global?
 		//Lecture du tube avec comme chemin le tid du thread
+		SE_FICHIER tube = SE_ouverture(num_tid, O_RDONLY);
+		if (tube.descripteur < 0) 
+		{
+			fprintf(stderr, "ERR: opening tube\n");
+			exit(EXIT_FAILURE);
+		}
+		
 		//Recuperation de l'information ecrite dans le tube 
-		//Suppresion du tube 
-		//Creation du tube à partir du même tid que le tube du mode lecture
+		//Fermeture et Suppresion du tube 
+		SE_fermeture (tube);
+		SE_suppression (num_tid);
+		
 		//Utiliser l'algo de LRU pout verifier la demande soit presente dans le cache
+		//Creation du tube à partir du même tid que le tube du mode lecture
+		mkfifo (num_tid, 0600);
+		
 		//Si la valeur est presente renvoyer la valeur grace au tube en ecriture
+		//Ouverture du tube en mode ecriture
+		SE_FICHIER tube = SE_ouverture(num_tid, O_WRONLY);
+		if (tube.descripteur < 0) 
+		{
+			fprintf(stderr, "ERR: opening tube\n");
+			exit(EXIT_FAILURE);
+		}
+		
 		//Sinon renvoyé 0 par exemple 
 		
+		//Fermeture du tube
+		SE_fermeture (tube);
 	}
 	
 	//Fin des threads
