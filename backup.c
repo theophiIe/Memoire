@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+
 #include "se_fichier.h"
 
 typedef struct 
@@ -45,14 +46,14 @@ DATA initStruct(const char *chemin)
 	file = SE_ouverture (chemin, O_RDONLY);
 	if (file.descripteur < 0) 
 	{
-		fprintf(stderr, "ERR: opening cfg file\n");
+		fprintf(stderr, "\nERR: opening cfg file\n");
 		exit(EXIT_FAILURE);
 	}
 
 	rd = SE_lectureEntier(file, &dt.nbrFrames);
 	if (rd <= 0)
 	{
-		fprintf(stderr, "ERR: missing nbrFrames\n");
+		fprintf(stderr, "\nERR: missing nbrFrames\n");
 		SE_fermeture(file);
 		exit(EXIT_FAILURE);
 	}
@@ -60,7 +61,7 @@ DATA initStruct(const char *chemin)
 	rd = SE_lectureEntier(file, &dt.taillePage);
 	if (rd <= 0)
 	{
-		fprintf(stderr, "ERR: missing taillePage\n");
+		fprintf(stderr, "\nERR: missing taillePage\n");
 		SE_fermeture(file);
 		exit(EXIT_FAILURE);
 	}
@@ -68,7 +69,7 @@ DATA initStruct(const char *chemin)
 	rd = SE_lectureEntier(file, &dt.nbrPage);
 	if (rd <= 0)
 	{
-		fprintf(stderr, "ERR: missing nbrPage\n");
+		fprintf(stderr, "\nERR: missing nbrPage\n");
 		SE_fermeture(file);
 		exit(EXIT_FAILURE);
 	}
@@ -76,7 +77,7 @@ DATA initStruct(const char *chemin)
 	rd = SE_lectureEntier(file, &dt.nbrThread);
 	if (rd <= 0)
 	{
-		fprintf(stderr, "ERR: missing nbrThread\n");
+		fprintf(stderr, "\nERR: missing nbrThread\n");
 		SE_fermeture(file);
 		exit(EXIT_FAILURE);
 	}
@@ -84,7 +85,7 @@ DATA initStruct(const char *chemin)
 	rd = SE_lectureEntier(file, &dt.nbrAcces);
 	if (rd <= 0)
 	{
-		fprintf(stderr, "ERR: missing nbrAcces\n");
+		fprintf(stderr, "\nERR: missing nbrAcces\n");
 		SE_fermeture(file);
 		exit(EXIT_FAILURE);
 	}
@@ -118,11 +119,78 @@ void afficheConfig(DATA dt)
 	printf("Nombre de demande par thread : %d\n\n", dt.nbrAcces);
 }
 
-int *LRU(int frame)
-{
-	int *cache;
+
+//~ int *LRU(int frame)
+//~ {
+	//~ int *cache;
 	
-	return cache;
+	//~ return cache;
+//~ }
+
+void creationTube()
+{
+	mkfifo("/tmp/FIFO1", 0666);
+	mkfifo("/tmp/FIFO2", 0666);
+}
+
+void suppressionTube()
+{
+	unlink("/tmp/FIFO1");
+	unlink("/tmp/FIFO2");
+}
+
+void lectureTube(const char *chemin)
+{
+	int valRD, nb_numbers;
+	
+	SE_FICHIER tube = SE_ouverture(chemin, O_RDONLY);
+	if (tube.descripteur < 0) 
+	{
+		fprintf(stderr, "\nERR: opening pipe\n");
+		exit(EXIT_FAILURE);
+	}
+	
+	valRD = SE_lectureEntier(tube, &nb_numbers);
+	if (valRD <= 0) 
+	{
+		fprintf(stderr, "\nERR: read in pipe\n");
+		SE_fermeture(tube);
+		exit(EXIT_FAILURE);
+	}
+	
+	printf("Lecture reussite pipe n°2 fils : %d\n", nb_numbers);
+	
+	SE_fermeture (tube);
+}
+
+void ecritureTube(const char *chemin, int val)
+{
+	int valWR;
+	
+	SE_FICHIER tube = SE_ouverture(chemin, O_WRONLY);
+	if (tube.descripteur < 0) 
+	{
+		fprintf(stderr, "\nERR: opening pipe\n");
+		exit(EXIT_FAILURE);
+	}
+	
+	valWR = SE_ecritureEntier(tube, val);
+	if (valWR <= 0) 
+	{
+		fprintf(stderr, "\nERR: write in pipe\n");
+		SE_fermeture(tube);
+		exit(EXIT_FAILURE);
+	}
+	
+	valWR = SE_ecritureCaractere (tube, ' ');
+	if(valWR <= 0)
+	{
+		fprintf(stderr, "\nERR: write in pipe\n");
+		SE_fermeture(tube);
+		exit(EXIT_FAILURE);
+	}
+	
+	SE_fermeture (tube);
 }
 
 void * demandeAcces (void * arg)
@@ -148,7 +216,7 @@ void * demandeAcces (void * arg)
 		SE_FICHIER tube = SE_ouverture(chemin1, O_WRONLY);
 		if (tube.descripteur < 0) 
 		{
-			fprintf(stderr, "ERR: opening pipe\n");
+			fprintf(stderr, "\nERR: opening pipe\n");
 			exit(EXIT_FAILURE);
 		}
 		printf("Ouverture réussite du tube n°1 par le fils\n");
@@ -157,20 +225,25 @@ void * demandeAcces (void * arg)
 		sleep(0.1);
 		printf("tid : %ld\n", pthread_self());
 		printf("Tentative d'ecriture pipe n°1 fils\n");
+		
 		valWR = SE_ecritureEntier(tube, pthread_self());
 		if (valWR <= 0) 
 		{
-			fprintf(stderr, "ERR: write in pipe\n");
+			fprintf(stderr, "\nERR: write in pipe\n");
 			SE_fermeture(tube);
 			exit(EXIT_FAILURE);
 		}
 		
-		if(SE_ecritureCaractere (tube, ' ') == -1)
+		valWR = SE_ecritureCaractere (tube, ' ');
+		if(valWR <= 0)
 		{
-			printf("Une erreur d'écriture a eu lieu\n");
-			return -1;
+			fprintf(stderr, "\nERR: write in pipe\n");
+			SE_fermeture(tube);
+			exit(EXIT_FAILURE);
 		}
+		
 		printf("Ecriture reussite pipe n°1 fils\n");
+		sleep(0.4);
 		
 		//Fermeture du tube
 		SE_fermeture (tube);
@@ -183,7 +256,7 @@ void * demandeAcces (void * arg)
 		tube = SE_ouverture(chemin2, O_RDONLY);
 		if (tube.descripteur < 0) 
 		{
-			fprintf(stderr, "ERR: opening pipe\n");
+			fprintf(stderr, "\nERR: opening pipe\n");
 			exit(EXIT_FAILURE);
 		}
 		printf("Ouverture réussite du tube n°2 par le fils\n");
@@ -194,7 +267,7 @@ void * demandeAcces (void * arg)
 		valRD = SE_lectureEntier(tube, &nb_numbers);
 		if (valRD <= 0) 
 		{
-			fprintf(stderr, "ERR: read in pipe\n");
+			fprintf(stderr, "\nERR: read in pipe\n");
 			SE_fermeture(tube);
 			exit(EXIT_FAILURE);
 		}
@@ -210,7 +283,7 @@ void * demandeAcces (void * arg)
 		
 		//Fin du mutex
 		pthread_mutex_unlock(at -> mut);
-		printf("Fin du mutex");
+		printf("Fin du mutex\n");
 	}
 	
 	return NULL;
@@ -255,7 +328,7 @@ void gestionThread(DATA dt)
 		valFIFO = mkfifo(chemin1, 0600);
 		if (valFIFO) 
 		{
-			fprintf(stderr, "ERR: creating pipe n°1\n");
+			fprintf(stderr, "\nERR: creating pipe n°1\n");
 			unlink(chemin1);
 			exit(EXIT_FAILURE);
 		}
@@ -266,7 +339,7 @@ void gestionThread(DATA dt)
 		SE_FICHIER tube = SE_ouverture(chemin1, O_RDONLY);
 		if (tube.descripteur < 0) 
 		{
-			fprintf(stderr, "ERR: opening pipe\n");
+			fprintf(stderr, "\nERR: opening pipe\n");
 			exit(EXIT_FAILURE);
 		}
 		
@@ -277,7 +350,7 @@ void gestionThread(DATA dt)
 		valRD = SE_lectureEntier(tube, &nb_numbers);
 		if (valRD <= 0) 
 		{
-			fprintf(stderr, "ERR: missing nb_numbers\n");
+			fprintf(stderr, "\nERR: missing nb_numbers\n");
 			SE_fermeture(tube);
 			exit(EXIT_FAILURE);
 		}
@@ -298,7 +371,7 @@ void gestionThread(DATA dt)
 		valFIFO = mkfifo(chemin2, 0600);
 		if (valFIFO) 
 		{
-			fprintf(stderr, "ERR: creating pipe n°2\n");
+			fprintf(stderr, "\nERR: creating pipe n°2\n");
 			unlink(chemin2);
 			exit(EXIT_FAILURE);
 		}
@@ -309,19 +382,27 @@ void gestionThread(DATA dt)
 		tube = SE_ouverture(chemin2, O_WRONLY);
 		if (tube.descripteur < 0) 
 		{
-			fprintf(stderr, "ERR: opening pipe\n");
+			fprintf(stderr, "\nERR: opening pipe\n");
 			exit(EXIT_FAILURE);
 		}
 		
 		printf("Ouverture reussite du pipe père n°2\n");
 		
 		//Ecriture dans le tube
-		sleep(0.1);
+		
 		printf("Tentative d'ecriture pipe n°2 père\n");
 		valWR = SE_ecritureEntier(tube, pthread_self());
 		if (valWR <= 0) 
 		{
-			fprintf(stderr, "ERR: write in pipe\n");
+			fprintf(stderr, "\nERR: write in pipe\n");
+			SE_fermeture(tube);
+			exit(EXIT_FAILURE);
+		}
+		
+		valWR = SE_ecritureCaractere (tube, ' ');
+		if(valWR <= 0)
+		{
+			fprintf(stderr, "\nERR: write in pipe\n");
 			SE_fermeture(tube);
 			exit(EXIT_FAILURE);
 		}
