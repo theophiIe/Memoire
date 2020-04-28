@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -32,7 +33,6 @@ typedef struct
 	
 	int hit;		//< Nombre de hit
 	int numReq;		//< Nombre de requête
-	int start;
 	
 } ARG_T;
 
@@ -120,18 +120,102 @@ void afficheConfig(DATA dt)
 }
 
 
-//~ int *LRU(int frame)
-//~ {
-	//~ int *cache;
+int LRU(int nbrFrame, int nbrPage, int *tabIndexe, int *memRapide, int *memLente, int adresse)
+{
+	int test = 0;
+	int valMax = 0;
 	
-	//~ return cache;
-//~ }
+	//Recheche dans la mémoire Rapide
+	for(int cmptR = 0; cmptR < nbrFrame; cmptR++)
+	{
+		if(memRapide[cmptR] == -1)
+		{
+			memRapide[cmptR] = adresse;
+			
+			for(int cmptI = 0; cmptI < nbrFrame; cmptI++)
+			{
+				if(tabIndexe[cmptI] != -1 && cmptI != cmptR)
+					tabIndexe[cmptI] += 1;
+				
+				else if(cmptI == cmptR)
+					tabIndexe[cmptI] = 0;
+			}
+			
+			return 0; //Voir quoi return si rien d'allouer ?
+		}
+		
+		else if(memRapide[cmptR] == adresse)
+		{
+			for(int cmptI = 0; cmptI < nbrFrame; cmptI++)
+			{
+				if(tabIndexe[cmptI] != -1 && cmptI != cmptR)
+					tabIndexe[cmptI] += 1;
+				
+				else if(cmptI == cmptR)
+					tabIndexe[cmptI] = 0;
+			}
+			
+			return memRapide[cmptR]; //Pas sur ?
+		}
+	}
+	
+	//Recherche dans la memoire lente
+	for(int cmptL = 0; cmptL < nbrPage; cmptL++)
+	{
+		if(memLente[cmptL] == adresse)
+		{
+			//Recherche de la postion du plus ancien
+			for(int cmptI = 0; cmptI < nbrFrame; cmptI++)
+			{
+				if(tabIndexe[cmptI] > valMax)
+					valMax = tabIndexe[cmptI];
+			}
+			
+			//Modification du cache interversion de la valeur memL avec memR
+			for(int cmptR = 0; cmptR < nbrFrame; cmptR++)
+			{
+				if(tabIndexe[cmptR] == valMax)
+				{
+					memLente[cmptL] = memRapide[cmptR];
+					memRapide[cmptR] = adresse;
+					
+					//Mise à jour de l'indexe
+					for(int cmptI = 0; cmptI < nbrFrame; cmptI++)
+					{
+						if(tabIndexe[cmptI] != -1 && cmptI != cmptR)
+							tabIndexe[cmptI] += 1;
+						
+						else if(cmptI == cmptR)
+							tabIndexe[cmptI] = 0;
+					}
+					
+					return 0;// Trouver quoi return si le thread va cherhcer l'info dans la memoire lente
+				}
+					
+			}
+		}
+	}
+	
+	return test; //Si on arrive ici on a une erreur !
+}
 
 void creationTube()
 {
-	printf("val FIFO1 %d\n", mkfifo("/tmp/FIFO1", 0666));	
+	int valFIFO;
 	
-	printf("val FIFO2 %d\n", mkfifo("/tmp/FIFO2", 0666));
+	valFIFO = mkfifo("/tmp/FIFO1", 0666);
+	if(valFIFO != 0)
+	{
+		fprintf(stderr, "\nERR: creating fifo1\n");
+		exit(EXIT_FAILURE);
+	}
+	
+	valFIFO = mkfifo("/tmp/FIFO2", 0666);
+	if(valFIFO != 0)
+	{
+		fprintf(stderr, "\nERR: creating fifo2\n");
+		exit(EXIT_FAILURE);
+	}
 }
 
 void suppressionTube()
@@ -206,7 +290,7 @@ void * demandeAcces (void * arg)
 	const char *chemin2 = "/tmp/FIFO2";
 			
 	printf("debut du thread fils : %ld\n", pthread_self());
-	for(int cmpt = at -> start; cmpt < at -> numReq; cmpt++)
+	for(int cmpt = 0; cmpt < at -> numReq; cmpt++)
 	{
 		//Faire l'appel à la mutex
 		pthread_mutex_lock(at -> mut);
@@ -249,7 +333,6 @@ void gestionThread(DATA dt)
 		at[cmpt].mut = &mut;
 		at[cmpt].hit = 0;
 		at[cmpt].numReq = dt.nbrAcces;
-		at[cmpt].start = 0;
 		pthread_create(tid + cmpt, NULL, demandeAcces, at + cmpt);
 	}
 	
