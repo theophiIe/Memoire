@@ -24,6 +24,7 @@ typedef struct
 {
 	int *memRapide;		//< Memoire physique RAM
 	int *memLente;		//< Memoire physique Disque
+	int *tabIndexe;		//< Indexe pour le LRU
 	
 } MEMORY;
 
@@ -107,6 +108,10 @@ MEMORY initMemoirePhysique(int nbrPage, int nbrFrames)
 	for(int size = 0; size < nbrFrames; size++)
 		mem.memRapide[size] = -1;
 	
+	mem.tabIndexe = malloc(nbrFrames * sizeof(int));
+	for(int size = 0; size < nbrFrames; size++)
+		mem.tabIndexe[size] = -1;
+		
 	return mem;
 }
 
@@ -120,83 +125,81 @@ void afficheConfig(DATA dt)
 }
 
 
-int LRU(int nbrFrame, int nbrPage, int *tabIndexe, int *memRapide, int *memLente, int adresse)
+int LRU(int nbrFrame, int nbrPage, MEMORY *mem, int adresse)
 {
-	int test = 0;
 	int valMax = 0;
 	
 	//Recheche dans la mémoire Rapide
 	for(int cmptR = 0; cmptR < nbrFrame; cmptR++)
 	{
-		if(memRapide[cmptR] == -1)
+		if(mem -> memRapide[cmptR] == -1)
 		{
-			memRapide[cmptR] = adresse;
+			mem -> memRapide[cmptR] = adresse;
 			
 			for(int cmptI = 0; cmptI < nbrFrame; cmptI++)
 			{
-				if(tabIndexe[cmptI] != -1 && cmptI != cmptR)
-					tabIndexe[cmptI] += 1;
+				if(mem -> tabIndexe[cmptI] != -1 && cmptI != cmptR)
+					mem -> tabIndexe[cmptI] += 1;
 				
 				else if(cmptI == cmptR)
-					tabIndexe[cmptI] = 0;
+					mem -> tabIndexe[cmptI] = 0;
 			}
 			
 			return 0; //Voir quoi return si rien d'allouer ?
 		}
 		
-		else if(memRapide[cmptR] == adresse)
+		else if(mem -> memRapide[cmptR] == adresse)
 		{
 			for(int cmptI = 0; cmptI < nbrFrame; cmptI++)
 			{
-				if(tabIndexe[cmptI] != -1 && cmptI != cmptR)
-					tabIndexe[cmptI] += 1;
+				if(mem -> tabIndexe[cmptI] != -1 && cmptI != cmptR)
+					mem -> tabIndexe[cmptI] += 1;
 				
 				else if(cmptI == cmptR)
-					tabIndexe[cmptI] = 0;
+					mem -> tabIndexe[cmptI] = 0;
 			}
 			
-			return memRapide[cmptR]; //Pas sur ?
+			return mem -> memRapide[cmptR]; //Pas sur ?
 		}
 	}
 	
 	//Recherche dans la memoire lente
 	for(int cmptL = 0; cmptL < nbrPage; cmptL++)
 	{
-		if(memLente[cmptL] == adresse)
+		if(mem -> memLente[cmptL] == adresse)
 		{
 			//Recherche de la postion du plus ancien
 			for(int cmptI = 0; cmptI < nbrFrame; cmptI++)
 			{
-				if(tabIndexe[cmptI] > valMax)
-					valMax = tabIndexe[cmptI];
+				if(mem -> tabIndexe[cmptI] > valMax)
+					valMax = mem -> tabIndexe[cmptI];
 			}
 			
 			//Modification du cache interversion de la valeur memL avec memR
 			for(int cmptR = 0; cmptR < nbrFrame; cmptR++)
 			{
-				if(tabIndexe[cmptR] == valMax)
+				if(mem -> tabIndexe[cmptR] == valMax)
 				{
-					memLente[cmptL] = memRapide[cmptR];
-					memRapide[cmptR] = adresse;
+					mem -> memLente[cmptL] = mem -> memRapide[cmptR];
+					mem -> memRapide[cmptR] = adresse;
 					
 					//Mise à jour de l'indexe
 					for(int cmptI = 0; cmptI < nbrFrame; cmptI++)
 					{
-						if(tabIndexe[cmptI] != -1 && cmptI != cmptR)
-							tabIndexe[cmptI] += 1;
+						if(mem -> tabIndexe[cmptI] != -1 && cmptI != cmptR)
+							mem -> tabIndexe[cmptI] += 1;
 						
 						else if(cmptI == cmptR)
-							tabIndexe[cmptI] = 0;
+							mem -> tabIndexe[cmptI] = 0;
 					}
 					
-					return 0;// Trouver quoi return si le thread va cherhcer l'info dans la memoire lente
-				}
-					
+					return -1;// Trouver quoi return si le thread va cherhcer l'info dans la memoire lente
+				}	
 			}
 		}
 	}
 	
-	return test; //Si on arrive ici on a une erreur !
+	return -1; //Si on arrive ici on a une erreur !
 }
 
 void creationTube()
@@ -288,7 +291,9 @@ void * demandeAcces (void * arg)
 	//Création du chemin pour le tube
 	const char *chemin1 = "/tmp/FIFO1";
 	const char *chemin2 = "/tmp/FIFO2";
-			
+	
+	int reponse;
+		
 	printf("debut du thread fils : %ld\n", pthread_self());
 	for(int cmpt = 0; cmpt < at -> numReq; cmpt++)
 	{
@@ -299,8 +304,10 @@ void * demandeAcces (void * arg)
 		
 		ecritureTube(chemin1, cmpt);
 		
-		printf("Valeur du thread fils : %d\n", lectureTube(chemin2));
-		
+		reponse = lectureTube(chemin2);
+		if(reponse != -1)
+			at -> hit += 1;
+				
 		//Fin du mutex
 		pthread_mutex_unlock(at -> mut);
 	}
@@ -314,7 +321,10 @@ void gestionThread(DATA dt)
 	pthread_t * tid;
 	
 	ARG_T *at;
-	MEMORY mmy;
+	MEMORY mem;
+	
+	int adresse, page;
+	int moyenneHit = 0;
 	
 	const char *chemin1 = "/tmp/FIFO1";
 	const char *chemin2 = "/tmp/FIFO2";
@@ -325,7 +335,7 @@ void gestionThread(DATA dt)
 	//Creation mutex et barriere
 	pthread_mutex_init(&mut, NULL);
 	
-	mmy = initMemoirePhysique(dt.nbrPage, dt.nbrFrames);
+	mem = initMemoirePhysique(dt.nbrPage, dt.nbrFrames);
 	
 	//~ //Init des infos pour la structure des threads
 	for(int cmpt = 0; cmpt < dt.nbrThread; cmpt++)
@@ -343,9 +353,11 @@ void gestionThread(DATA dt)
 	
 	for(int cmpt = 0; cmpt < dt.nbrThread * dt.nbrAcces; cmpt++)
 	{
-		printf("Valeur du thread père : %d\n", lectureTube(chemin1));
+		adresse = lectureTube(chemin1);
 		
-		ecritureTube(chemin2, cmpt);
+		page = LRU(dt.nbrFrames, dt.nbrPage, &mem, adresse);
+		
+		ecritureTube(chemin2, page);
 	}
 	
 	suppressionTube();
@@ -353,6 +365,15 @@ void gestionThread(DATA dt)
 	//Fin des threads
 	for(int cmpt = 0; cmpt < dt.nbrThread; cmpt++)
 		pthread_join(tid[cmpt], NULL);
+	
+	for(int cmptT = 0; cmptT < dt.nbrThread; cmptT++)
+	{
+		printf("Nombre de hit pour le thread n° = %d\n", at[cmptT].hit);
+		moyenneHit += at[cmptT].hit;
+	}
+	
+	moyenneHit /= dt.nbrThread;
+	printf("La moyenne de hit est de : %d\n", moyenneHit);
 	
 	//Suppresion des mutex et des barrieres 
 	pthread_mutex_destroy(&mut);
