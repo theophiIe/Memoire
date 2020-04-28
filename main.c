@@ -129,8 +129,9 @@ void afficheConfig(DATA dt)
 
 void creationTube()
 {
-	mkfifo("/tmp/FIFO1", 0666);
-	mkfifo("/tmp/FIFO2", 0666);
+	printf("val FIFO1 %d\n", mkfifo("/tmp/FIFO1", 0666));	
+	
+	printf("val FIFO2 %d\n", mkfifo("/tmp/FIFO2", 0666));
 }
 
 void suppressionTube()
@@ -139,7 +140,7 @@ void suppressionTube()
 	unlink("/tmp/FIFO2");
 }
 
-void lectureTube(const char *chemin)
+int lectureTube(const char *chemin)
 {
 	int valRD, nb_numbers;
 	
@@ -155,12 +156,13 @@ void lectureTube(const char *chemin)
 	{
 		fprintf(stderr, "\nERR: read in pipe\n");
 		SE_fermeture(tube);
+		unlink(chemin);
 		exit(EXIT_FAILURE);
 	}
 	
-	printf("Lecture reussite pipe n°2 fils : %d\n", nb_numbers);
-	
 	SE_fermeture (tube);
+	
+	return nb_numbers;
 }
 
 void ecritureTube(const char *chemin, int val)
@@ -179,6 +181,7 @@ void ecritureTube(const char *chemin, int val)
 	{
 		fprintf(stderr, "\nERR: write in pipe\n");
 		SE_fermeture(tube);
+		unlink(chemin);
 		exit(EXIT_FAILURE);
 	}
 	
@@ -187,6 +190,7 @@ void ecritureTube(const char *chemin, int val)
 	{
 		fprintf(stderr, "\nERR: write in pipe\n");
 		SE_fermeture(tube);
+		unlink(chemin);
 		exit(EXIT_FAILURE);
 	}
 	
@@ -201,15 +205,17 @@ void * demandeAcces (void * arg)
 	const char *chemin1 = "/tmp/FIFO1";
 	const char *chemin2 = "/tmp/FIFO2";
 			
-	printf("debut du thread fils\n");
+	printf("debut du thread fils : %ld\n", pthread_self());
 	for(int cmpt = at -> start; cmpt < at -> numReq; cmpt++)
 	{
 		//Faire l'appel à la mutex
 		pthread_mutex_lock(at -> mut);
 		
+		printf("tid thread fils : %ld\n", pthread_self());
+		
 		ecritureTube(chemin1, cmpt);
 		
-		lectureTube(chemin2);
+		printf("Valeur du thread fils : %d\n", lectureTube(chemin2));
 		
 		//Fin du mutex
 		pthread_mutex_unlock(at -> mut);
@@ -220,19 +226,22 @@ void * demandeAcces (void * arg)
 
 void gestionThread(DATA dt)
 {
-	pthread_mutex_t mut;
+	pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 	pthread_t * tid;
 	
 	ARG_T *at;
+	MEMORY mmy;
 	
 	const char *chemin1 = "/tmp/FIFO1";
 	const char *chemin2 = "/tmp/FIFO2";
 		
 	at  = malloc(dt.nbrThread * sizeof(ARG_T));
-	tid = malloc (dt.nbrThread * sizeof (pthread_t) );
+	tid = malloc(dt.nbrThread * sizeof(pthread_t) );
 	
 	//Creation mutex et barriere
 	pthread_mutex_init(&mut, NULL);
+	
+	mmy = initMemoirePhysique(dt.nbrPage, dt.nbrFrames);
 	
 	//~ //Init des infos pour la structure des threads
 	for(int cmpt = 0; cmpt < dt.nbrThread; cmpt++)
@@ -244,8 +253,6 @@ void gestionThread(DATA dt)
 		pthread_create(tid + cmpt, NULL, demandeAcces, at + cmpt);
 	}
 	
-	//Communication par tubes
-
 	printf("Début du thread père\n");
 	printf("for = %d\n", dt.nbrThread * dt.nbrAcces);
 	
@@ -253,7 +260,7 @@ void gestionThread(DATA dt)
 	
 	for(int cmpt = 0; cmpt < dt.nbrThread * dt.nbrAcces; cmpt++)
 	{
-		lectureTube(chemin1);
+		printf("Valeur du thread père : %d\n", lectureTube(chemin1));
 		
 		ecritureTube(chemin2, cmpt);
 	}
