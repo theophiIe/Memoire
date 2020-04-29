@@ -8,6 +8,8 @@
 #include <errno.h>
 #include <string.h>
 
+#include <time.h>
+
 #include "se_fichier.h"
 
 typedef struct 
@@ -159,7 +161,9 @@ int LRU(int nbrFrame, int nbrPage, MEMORY *mem, int adresse)
 					mem -> tabIndexe[cmptI] = 0;
 			}
 			
-			return mem -> memRapide[cmptR]; //Pas sur ?
+			printf("logique %d\n", cmptR * nbrPage + (nbrPage % nbrPage));
+			return cmptR * nbrPage + (nbrPage % nbrPage);
+			//return mem -> memRapide[cmptR]; //Pas sur ?
 		}
 	}
 	
@@ -192,7 +196,7 @@ int LRU(int nbrFrame, int nbrPage, MEMORY *mem, int adresse)
 						else if(cmptI == cmptR)
 							mem -> tabIndexe[cmptI] = 0;
 					}
-					
+					printf("nul\n");
 					return -1;// Trouver quoi return si le thread va cherhcer l'info dans la memoire lente
 				}	
 			}
@@ -293,16 +297,18 @@ void * demandeAcces (void * arg)
 	const char *chemin2 = "/tmp/FIFO2";
 	
 	int reponse;
-		
+	int val;
+	
 	printf("debut du thread fils : %ld\n", pthread_self());
+	
 	for(int cmpt = 0; cmpt < at -> numReq; cmpt++)
 	{
 		//Faire l'appel à la mutex
 		pthread_mutex_lock(at -> mut);
 		
-		printf("tid thread fils : %ld\n", pthread_self());
+		val = rand() % 256;
 		
-		ecritureTube(chemin1, cmpt);
+		ecritureTube(chemin1, val);
 		
 		reponse = lectureTube(chemin2);
 		if(reponse != -1)
@@ -340,8 +346,8 @@ void gestionThread(DATA dt)
 	//~ //Init des infos pour la structure des threads
 	for(int cmpt = 0; cmpt < dt.nbrThread; cmpt++)
 	{
-		at[cmpt].mut = &mut;
-		at[cmpt].hit = 0;
+		at[cmpt].mut 	= &mut;
+		at[cmpt].hit 	= 0;
 		at[cmpt].numReq = dt.nbrAcces;
 		pthread_create(tid + cmpt, NULL, demandeAcces, at + cmpt);
 	}
@@ -368,15 +374,19 @@ void gestionThread(DATA dt)
 	
 	for(int cmptT = 0; cmptT < dt.nbrThread; cmptT++)
 	{
-		printf("Nombre de hit pour le thread n° = %d\n", at[cmptT].hit);
+		printf("Nombre de hit pour le thread n° = %d pourcent \n", at[cmptT].hit * 100 / dt.nbrAcces);
 		moyenneHit += at[cmptT].hit;
 	}
 	
 	moyenneHit /= dt.nbrThread;
-	printf("La moyenne de hit est de : %d\n", moyenneHit);
+	printf("La moyenne de hit est de : %d pourcent\n", moyenneHit * 100 / dt.nbrAcces);
 	
 	//Suppresion des mutex et des barrieres 
 	pthread_mutex_destroy(&mut);
+	
+	free(mem.memRapide);
+	free(mem.memLente);
+	free(mem.tabIndexe);
 	
 	free(at);
 	free(tid);
@@ -385,6 +395,8 @@ void gestionThread(DATA dt)
 int main(int argc, char ** argv)
 {
 	const char *chemin = "data.cfg";
+	
+	srand(getpid());
 	
 	DATA dt = initStruct(chemin);
 	
