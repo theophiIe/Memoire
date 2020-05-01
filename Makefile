@@ -1,18 +1,22 @@
 CC = gcc
 CFLAGS = -Wall -g -pthread
+LENOM = MOLINATTI_Theophile
 
 run: compile
 	./main
 
-compile:
+compile: clean
 	$(CC) $(CFLAGS) main.c -L. -liof -o main
-	
+
+valgrind: compile
+	valgrind ./main
+
 clean:
 	rm -f main
+	rm -f /tmp/FIFO1
+	rm -f /tmp/FIFO2
 	rm -f ${LENOM}.tar
 	ls
-	
-LENOM=MOLINATTI_Theophile
 
 tar:
 	rm -f ${LENOM}.tar
