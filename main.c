@@ -36,6 +36,7 @@ typedef struct
 	
 	int hit;		//< Nombre de hit
 	int numReq;		//< Nombre de requête
+	int nbrPages;	//< Nombre de page
 	
 } ARG_T;
 
@@ -217,18 +218,25 @@ void creationTube()
 		exit(EXIT_FAILURE);
 	}
 	
+	printf("Création de FIFO1\n");
+	
 	valFIFO = mkfifo("/tmp/FIFO2", 0666);
 	if(valFIFO != 0)
 	{
 		fprintf(stderr, "\nERR: creating fifo2\n");
 		exit(EXIT_FAILURE);
 	}
+	
+	printf("Création de FIFO2\n\n");
 }
 
 void suppressionTube()
 {
 	unlink("/tmp/FIFO1");
+	printf("\nSupression de FIFO1\n");
+	
 	unlink("/tmp/FIFO2");
+	printf("Supression de FIFO2\n\n");
 }
 
 int lectureTube(const char *chemin)
@@ -306,7 +314,7 @@ void * demandeAcces (void * arg)
 		//Faire l'appel à la mutex
 		pthread_mutex_lock(at -> mut);
 		
-		val = rand() % 256;
+		val = rand() % at -> nbrPages;
 		
 		ecritureTube(chemin1, val);
 		
@@ -343,19 +351,20 @@ void gestionThread(DATA dt)
 	
 	mem = initMemoirePhysique(dt.nbrPage, dt.nbrFrames);
 	
+	creationTube();
+	
 	//~ //Init des infos pour la structure des threads
 	for(int cmpt = 0; cmpt < dt.nbrThread; cmpt++)
 	{
-		at[cmpt].mut 	= &mut;
-		at[cmpt].hit 	= 0;
-		at[cmpt].numReq = dt.nbrAcces;
+		at[cmpt].mut 	  = &mut;
+		at[cmpt].hit 	  = 0;
+		at[cmpt].numReq   = dt.nbrAcces;
+		at[cmpt].nbrPages = dt.nbrPage;
 		pthread_create(tid + cmpt, NULL, demandeAcces, at + cmpt);
 	}
 	
 	printf("Début du thread père\n");
 	printf("for = %d\n", dt.nbrThread * dt.nbrAcces);
-	
-	creationTube();
 	
 	for(int cmpt = 0; cmpt < dt.nbrThread * dt.nbrAcces; cmpt++)
 	{
@@ -379,11 +388,12 @@ void gestionThread(DATA dt)
 	}
 	
 	moyenneHit /= dt.nbrThread;
-	printf("La moyenne de hit est de : %d pourcent\n", moyenneHit * 100 / dt.nbrAcces);
+	printf("\nLa moyenne de hit est de : %d pourcent\n", moyenneHit * 100 / dt.nbrAcces);
 	
 	//Suppresion des mutex et des barrieres 
 	pthread_mutex_destroy(&mut);
 	
+	//Libération de la mémoire alloué
 	free(mem.memRapide);
 	free(mem.memLente);
 	free(mem.tabIndexe);
