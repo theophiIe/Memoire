@@ -7,7 +7,6 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
-
 #include <time.h>
 
 #include "se_fichier.h"
@@ -102,7 +101,7 @@ DATA initStruct(DATA dt, const char *chemin)
 }
 
 //Fonction qui alloue la mémoire pour la mémoire lente,
-//la mémoire rapide et l'index
+//la mémoire rapide et l'index et met toute les valeurs à -1
 MEMORY initMemoirePhysique(MEMORY mem, int nbrPage, int nbrFrames)
 {
 	mem.memLente = malloc(nbrPage * sizeof(int));
@@ -211,7 +210,7 @@ int LRU(int nbrFrame, int nbrPage, int taillePage, MEMORY *mem, int adresse)
 							mem -> tabIndex[cmptI] = 0;
 					}
 					
-					return -1; // 
+					return -1;
 				}	
 			}
 		}
@@ -327,7 +326,8 @@ void * demandeAcces (void * arg)
 		//Mutex
 		pthread_mutex_lock(at -> mut);
 		
-		page = rand() % 10;
+		//Adresse physique
+		page = rand() % at -> nbrPages;
 		printf("Le thread n°%ld fais une demande pour la page : %d\n", pthread_self(), page);
 		
 		ecritureTube(chemin1, page);
@@ -337,7 +337,7 @@ void * demandeAcces (void * arg)
 		
 		if(reponse != -1)
 			at -> hit += 1;
-				
+
 		//Fin du mutex
 		pthread_mutex_unlock(at -> mut);
 	}
@@ -398,13 +398,13 @@ void gestionThread(DATA dt)
 	//Affichage du nombre de hit par thread
 	for(int cmptT = 0; cmptT < dt.nbrThread; cmptT++)
 	{
-		printf("Nombre de hit pour le thread n°%ld = %d pourcent \n", tid[cmptT], at[cmptT].hit * 100 / dt.nbrAcces);
+		printf("Nombre de hit pour le thread n°%ld = %d%% \n", tid[cmptT], at[cmptT].hit * 100 / dt.nbrAcces);
 		moyenneHit += at[cmptT].hit;
 	}
 	
 	//Calcul de la moyenne de hit
 	moyenneHit /= dt.nbrThread;
-	printf("\nLa moyenne de hit est de : %d pourcent\n", moyenneHit * 100 / dt.nbrAcces);
+	printf("\nLa moyenne de hit est de : %d%% \n", moyenneHit * 100 / dt.nbrAcces);
 	
 	//Suppresion des mutex et des barrieres 
 	pthread_mutex_destroy(&mut);
